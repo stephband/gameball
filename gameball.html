@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="author" content="Elmar Hacke" />
+    <meta name="description" content="Ball game" />
+    <meta name="viewport" content="width=device-width" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
+
+    <style>
+        canvas {
+            border-width: 0;
+            background-image: linear-gradient(to right, #395577, #99bbcc);
+        }
+
+        :root,
+        body {
+            overflow: hidden;
+            margin: 0;
+            background-color: black;
+        }
+
+        .dead-message {
+            position: fixed;
+            top: 30%;
+            left: 50%;
+            transform: translate3d(-50%, -50%, 0) rotate(-15deg);
+
+            font-family: 'Permanent Marker', cursive;
+            font-size: 70px;
+            color: red;
+            text-shadow: 0 6px 8px rgba(0, 0, 0, 0.4);
+        }
+
+        .restart-button {
+            position: fixed;
+            bottom: 20%;
+            left: 50%;
+            transform: translate3d(-50%, 0, 0);
+
+            background-color: green;
+            color: whitesmoke;
+            border: 2px solid whitesmoke;
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .score-message {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            line-height: 1em;
+            margin: 0;
+
+            font-family: 'Permanent Marker', cursive;
+            font-size: 64px;
+        }
+
+        .hiscore-form {
+            position: fixed;
+            bottom: 40%;
+            left: 50%;
+            transform: translate3d(-50%, 0, 0);
+        }
+
+        .hiscores-table {
+            position: fixed;
+            bottom: 40%;
+            left: 50%;
+            transform: translate3d(-50%, 0, 0);
+
+            font-family: 'Permanent Marker', cursive;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="990"></canvas>
+
+    <!-- User messages -->
+    <div class="dead-message" id="dead-message" hidden>
+        <p>Your base was hit.</p>
+    </div>
+
+    <form class="hiscore-form" id="hiscore-form" hidden>
+        <h2>But you have a high score!</h2>
+        <label>Enter your name</label>
+        <input type="text" name="name" placeholder="James T Kirk" />
+        <input type="submit" class="button" value="Send" />
+    </form>
+
+    <pre class="hiscores-table" id="hiscores-table" hidden></pre>
+
+    <button class="restart-button" name="location" value="" id="restart-button" hidden>Restart</button>
+
+    <p class="score-message" id="score-message">0</p>
+
+    <!-- JavaScript -->
+    <script type="module">
+    import events   from '../dom/modules/events.js';
+    import now      from '../dom/modules/now.js';
+    import get      from '../fn/modules/get.js';
+    import overload from '../fn/modules/overload.js';
+
+    // Set up the canvas
+    const canvas        = document.querySelector("canvas");
+    const deadMessage   = document.getElementById("dead-message");
+    const scoreMessage  = document.getElementById("score-message");
+    const restartButton = document.getElementById("restart-button");
+    const hiscoreForm   = document.getElementById("hiscore-form");
+    const hiscoresTable = document.getElementById("hiscores-table");
+
+    const ctx         = canvas.getContext("2d");
+    const gravity     = 0.3;
+    const minRadius   = 10;
+    const maxRadius   = 67;
+    const minVelocity = 2;
+    const maxVelocity = 7;
+
+    let stopTime;
+
+    // Set canvas dimensions to same size as the window
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let directionY = 0;
+    //let bulletCount = 0;
+
+    const balls = [];
+    const bullets = [];
+    const explosions = [];
+
+    let gamestate = 'play';
+    let numberOfBalls = 2;
+    let score = 0;
+    let hiscore = localStorage.getItem('hiscore') || 0;
+    hiscore = typeof hiscore === 'string' ?
+        parseInt(hiscore, 10) :
+        hiscore ;
+
+    // Box
+    const box = {
+        x: 0,
+        y: 0,
+        width:  window.innerWidth,
+        height: window.innerHeight
+    };
+
+    function drawBox() {
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 1;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.rect(box.x, box.y, box.width, box.height);
+        ctx.stroke();
+        ctx.closePath();
+    }
+
+
+    // Balls
+
+    function updateBall(ball) {
+        ball.vy += gravity;
+
+        // Update the ball position
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+    }
+
+    function drawBall(ball) {
+        ctx.fillStyle   = ball.color + 'cc';
+        ctx.strokeStyle = ball.color;
+        ctx.lineWidth   = 2;
+        ctx.lineCap     = 'round';
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.stroke();
+        ctx.strokeStyle = ball.color + '88';
+        ctx.stroke();
+        ctx.closePath();
+    }
+
+    function drawBullet(bullet) {
+        ctx.fillStyle   = bullet.color;
+        ctx.lineWidth   = 1;
+        ctx.lineCap     = 'round';
+        ctx.beginPath();
+        ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.closePath();
+    }
+
+
+    // Explosions
+
+    function updateExplosion(ball, n) {
+        ball.radius += 0.333333;
+        ball.explodeRadius += 2.4;
+        ball.opacity = 0.6 - (now() - ball.explodeTime);
+        if (ball.opacity <= 0) {
+            explosions.splice(n, 1);
+        }
+    }
+
+    function drawExplosion(ball) {
+        ctx.fillStyle = ball.color + ('0' + Math.round(ball.opacity * 80).toString(16)).slice(-2);
+
+        //ctx.strokeStyle = ball.color;
+        //ctx.lineWidth   = 2;
+        //ctx.lineCap     = 'round';
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.explodeRadius, 0, Math.PI * 2);
+        ctx.fill();
+        //ctx.strokeStyle = '#000000';
+        //ctx.stroke();
+        //ctx.strokeStyle = ball.color + '88';
+        //ctx.stroke();
+        ctx.closePath();
+
+        ctx.fillStyle = ball.color + ('0' + Math.round(ball.opacity * 120).toString(16)).slice(-2);
+
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+        ctx.fill();
+        //ctx.strokeStyle = '#000000';
+        //ctx.stroke();
+        //ctx.strokeStyle = ball.color + '88';
+        //ctx.stroke();
+        ctx.closePath();
+    }
+
+    // Gun
+
+    const gun = {
+        radius: 30,
+        x: box.width,
+        y: box.height / 2,
+        vx: 0,
+        vy: 0,
+        color: '#000000'
+    };
+
+    function updateGun() {
+        //gun.x += gun.vx;
+        directionY += gun.vy;
+        if (directionY > 50) {
+            directionY = 50;
+        }
+        else if (directionY < -50) {
+            directionY = -50;
+        }
+    }
+
+    function drawGun() {
+        ctx.fillStyle   = gun.color + '66';
+        ctx.strokeStyle = gun.color;
+        ctx.lineWidth   = 3;
+        ctx.lineCap     = 'square';
+        ctx.beginPath();
+        ctx.arc(gun.x, gun.y, gun.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.closePath();
+
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth   = 20;
+        ctx.lineCap     = 'square';
+        ctx.beginPath();
+        ctx.moveTo(gun.x, gun.y);
+        ctx.lineTo(gun.x - gun.radius, gun.y + directionY);
+        ctx.stroke();
+        ctx.closePath();
+    }
+
+
+    // Score
+
+    function updateScore(n) {
+        score = score + n;
+        scoreMessage.innerHTML = score;
+    }
+
+    function getHiscores() {
+        let hiscores = localStorage.getItem('hiscores');
+        return hiscores ?
+            JSON.parse(hiscores) :
+            [] ;
+    }
+
+    function renderHiscores(hiscores) {
+        const topsix = hiscores.slice(-6);
+        return topsix.reverse().reduce(function(html, entry) {
+            return html + '<br/>' + entry.score + ' – ' + entry.name;
+        }, '');
+    }
+
+    function createColor() {
+        return '#' +
+            ('0' + (Math.round(Math.random() * 255)).toString(16)).slice(-2) +
+            ('0' + (Math.round(Math.random() * 255)).toString(16)).slice(-2) +
+            ('0' + (Math.round(Math.random() * 255)).toString(16)).slice(-2) ;
+    }
+
+    function createBalls(n) {
+        while (n--) {
+            const color = createColor();
+
+            balls.push({
+                radius: minRadius + Math.random() * (maxRadius - minRadius),
+                x:      maxRadius + Math.random() * (box.width - 6 * maxRadius),
+                y:      maxRadius + Math.random() * (box.height - 6 * maxRadius),
+                vx:     minVelocity + Math.random() * (maxVelocity - minVelocity),
+                vy:     minVelocity + Math.random() * (maxVelocity - minVelocity),
+                color:  color
+            });
+        }
+    }
+
+    function collideBullet(bullet, n) {
+        // Check for out-of-box at the sides of the box (x)
+        if (bullet.x - bullet.radius > box.x + box.width || bullet.x + bullet.radius < box.x) {
+            // Remove bullet
+            bullets.splice(n, 1);
+        }
+
+        // Check collisions with the top and bottom (y)
+        if (bullet.y + bullet.radius > box.y + box.height || bullet.y - bullet.radius < box.y) {
+            bullet.vy = -bullet.vy;
+        }
+    }
+
+    function collideBall(ball, n) {
+        bullets.forEach(function(bullet, i) {
+          const touchDistance = bullet.radius + ball.radius;
+          const actualDistance = Math.pow((Math.pow(ball.x - bullet.x, 2) + Math.pow(ball.y - bullet.y, 2)), 0.5);
+
+          // Has a bullet hit this ball?
+          if (actualDistance < touchDistance) {
+            // Remove ball and bullet
+            balls.splice(n, 1);
+            bullets.splice(i, 1);
+
+            // Explode ball
+            ball.explodeRadius = ball.radius + 6;
+            ball.color = '#ffffff';
+            ball.explodeTime = now();
+            explosions.push(ball);
+
+            // Update score
+            const ballScore = Math.ceil(2.25 * (maxRadius - minRadius) / ball.radius);
+            updateScore(ballScore);
+
+            // If there are no more balls
+            if (balls.length === 0) {
+                // Advance to next level
+                numberOfBalls += 1;
+                createBalls(numberOfBalls);
+            }
+          }
+        });
+
+        const touchDistance  = gun.radius + ball.radius;
+        const actualDistance = Math.pow((Math.pow(ball.x - gun.x, 2) + Math.pow(ball.y - gun.y, 2)), 0.5);
+
+        // Has the ball hit the gun base?
+        if (actualDistance < touchDistance) {
+            gamestate = 'dead';
+            stopTime = now();
+            deadMessage.hidden = false;
+
+            if (score > hiscore) {
+                hiscoreForm.hidden = false;
+            }
+            else {
+                let hiscores = getHiscores();
+                hiscoresTable.innerHTML = renderHiscores(hiscores);
+                hiscoresTable.hidden = false;
+                setTimeout(function() { return restartButton.innerHTML += ' <small>(Press SPACE)</small>' ; }, 3000);
+            }
+            restartButton.hidden = false;
+        }
+
+        // Check for collisions with the walls of the box
+        if (ball.x + ball.radius > box.x + box.width || ball.x - ball.radius < box.x) {
+            ball.vx = -ball.vx;
+        }
+        if (ball.y + ball.radius > box.y + box.height || ball.y - ball.radius < box.y) {
+            ball.vy = -ball.vy;
+        }
+    }
+
+    function frame() {
+        bullets.forEach(updateBall);
+        bullets.forEach(collideBullet);
+        balls.forEach(updateBall);
+        balls.forEach(collideBall);
+        explosions.forEach(updateExplosion);
+        updateGun();
+
+        // Clear the canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw the ball and box
+        drawGun();
+        balls.forEach(drawBall);
+        bullets.forEach(drawBullet);
+        explosions.forEach(drawExplosion);
+        //drawBox();
+
+        // Schedule the next frame
+        if (gamestate === 'play') {
+            requestAnimationFrame(frame);
+        }
+    }
+
+
+    // Listen to the keyboard
+    events('keydown keyup', document)
+    .each(overload(get('key'), {
+        ArrowUp: overload(get('type'), {
+            keydown: function() {
+                //directionY += -5;
+                gun.vy = -1;
+            },
+
+            keyup: function() {
+                gun.vy = 0;
+            }
+        }),
+
+        ArrowDown: overload(get('type'), {
+            keydown: function() {
+                //directionY += 5;
+                gun.vy = 1;
+            },
+
+            keyup: function() {
+                gun.vy = 0;
+            }
+        }),
+
+        ' ': overload(get('type'), {
+            keydown: function() {
+                if (gamestate === 'dead') {
+                    return;
+                }
+
+                const bullet = {
+                    x: box.width,
+                    y: box.height / 2,
+                    radius: 9,
+                    vx: -30 + (Math.random() + Math.random() - 1) * 3,
+                    vy: directionY + (Math.random() - 0.5) * 2,
+                    color: "black"
+                };
+
+                bullets.push(bullet);
+
+                //bulletCount += 1;
+                //if (bulletCount > 2) {
+                //    bulletCount = 0;
+                    updateScore(-1);
+                //}
+            },
+
+            keyup: function() {
+                if (gamestate === 'dead' && hiscoreForm.hidden && stopTime + 1.2 < now()) {
+                    window.location = window.location;
+                }
+            }
+        }),
+
+        default: function() {}
+    }));
+
+    // Listen to the mouse or trackpad
+    events('click', document)
+    .each(function(e) {
+        if (e.target.name === 'location') {
+            window.location = window.location;
+        }
+    });
+
+    events('submit', hiscoreForm)
+    .each(function(e) {
+        let name = hiscoreForm.querySelector('input').value;
+        name = name ? name : 'Guest' ;
+
+        let hiscores = getHiscores();
+
+        hiscores.push({ name, score });
+        localStorage.setItem('hiscore', score);
+        localStorage.setItem('hiscores', JSON.stringify(hiscores));
+
+        hiscoresTable.innerHTML = renderHiscores(hiscores);
+        hiscoresTable.hidden = false;
+        hiscoreForm.hidden = true;
+        restartButton.innerHTML += ' <small>(Press SPACE)</small>' ;
+
+        e.preventDefault();
+    });
+
+    // Set up the canvas with the starting number of balls
+    createBalls(numberOfBalls);
+
+    // Start the animation
+    frame();
+    </script>
+</body>
+</html>
