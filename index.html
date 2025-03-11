@@ -21,7 +21,7 @@
             "soundstage/": "../soundstage/"
         }
     }</script>
-    
+
     <style>
         canvas {
             border-width: 0;
@@ -431,6 +431,8 @@
     }
 
 
+    let timeStamp = 0;
+
     // Listen to the keyboard
     events('keydown keyup', document)
     .each(overload(get('key'), {
@@ -457,10 +459,12 @@
         }),
 
         ' ': overload(get('type'), {
-            keydown: function() {
+            keydown: function(e) {
                 if (gamestate === 'dead') {
                     return;
                 }
+
+                if (e.timeStamp < (timeStamp + 200)) return;
 
                 const bullet = {
                     x: box.width,
@@ -472,6 +476,7 @@
                 };
 
                 bullets.push(bullet);
+                timeStamp = e.timeStamp;
 
                 //bulletCount += 1;
                 //if (bulletCount > 2) {
