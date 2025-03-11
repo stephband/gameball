@@ -254,7 +254,7 @@
         y: box.height / 2,
         vx: 0,
         vy: 0,
-        color: '#000000'
+        //color: '#000000'
     };
 
     function updateGun() {
@@ -268,9 +268,12 @@
         }
     }
 
-    function drawGun() {
-        ctx.fillStyle   = gun.color + '66';
-        ctx.strokeStyle = gun.color;
+    function drawGun(t) {
+        let fade = 1 - ((t - bulletsFrozenTimeStamp) / 5000);
+        fade = fade < 0 ? 0 : fade ;
+
+        ctx.fillStyle   = 'rgba(' + fade * 255 + ', 0, 0, 0.4)';
+        ctx.strokeStyle = 'rgb(' + fade * 255 + ', 0, 0)';
         ctx.lineWidth   = 3;
         ctx.lineCap     = 'square';
         ctx.beginPath();
@@ -279,7 +282,7 @@
         ctx.stroke();
         ctx.closePath();
 
-        ctx.strokeStyle = "#000";
+        ctx.strokeStyle = 'rgb(' + fade * 255 + ', 0, 0)';
         ctx.lineWidth   = 20;
         ctx.lineCap     = 'square';
         ctx.beginPath();
@@ -406,7 +409,7 @@
         }
     }
 
-    function frame() {
+    function frame(time) {
         bullets.forEach(updateBall);
         bullets.forEach(collideBullet);
         balls.forEach(updateBall);
@@ -418,7 +421,7 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         // Draw the ball and box
-        drawGun();
+        drawGun(time);
         balls.forEach(drawBall);
         bullets.forEach(drawBullet);
         explosions.forEach(drawExplosion);
@@ -476,11 +479,12 @@
                     const timeten = timeStamps[ni];
                     if (timeten + 1000 > timethis) {
                         bulletsFrozenTimeStamp = timethis;
-                        gun.color = "#ff0000";
+                        //gun.color = "#ff0000";
                         return;
                     }
                 }
-gun.color = "#000000";
+
+                //gun.color = "#000000";
 
 
 
@@ -544,7 +548,7 @@ gun.color = "#000000";
     createBalls(numberOfBalls);
 
     // Start the animation
-    frame();
+    frame(window.performance.now());
     </script>
 </body>
 </html>
