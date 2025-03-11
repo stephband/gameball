@@ -431,7 +431,8 @@
     }
 
 
-    let timeStamp = 0;
+    let timeStamps = [];
+    let bulletsFrozenTimeStamp = -5000;
 
     // Listen to the keyboard
     events('keydown keyup', document)
@@ -464,7 +465,24 @@
                     return;
                 }
 
-                if (e.timeStamp < (timeStamp + 200)) return;
+                const timethis = e.timeStamp;
+                const ni = timeStamps.length - 10;
+
+                if (bulletsFrozenTimeStamp + 5000 > timethis){
+                    return;
+                }
+
+                if (timeStamps[ni]) {
+                    const timeten = timeStamps[ni];
+                    if (timeten + 1000 > timethis) {
+                        bulletsFrozenTimeStamp = timethis;
+                        gun.color = "#ff0000";
+                        return;
+                    }
+                }
+gun.color = "#000000";
+
+
 
                 const bullet = {
                     x: box.width,
@@ -476,7 +494,7 @@
                 };
 
                 bullets.push(bullet);
-                timeStamp = e.timeStamp;
+                timeStamps.push(e.timeStamp);
 
                 //bulletCount += 1;
                 //if (bulletCount > 2) {
